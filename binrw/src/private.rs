@@ -133,10 +133,10 @@ where
     a
 }
 
-pub fn map_args_type_hint<Input, Output, MapFn, Args>(_: &MapFn, args: Args) -> Args
+pub fn map_args_type_hint<'a, Input, Output, MapFn, Args>(_: &MapFn, args: Args) -> Args
 where
     MapFn: FnOnce(Input) -> Output,
-    Input: for<'a> BinRead<Args<'a> = Args>,
+    Input: BinRead<Args<'a> = Args>,
 {
     args
 }
@@ -167,10 +167,10 @@ where
     x
 }
 
-pub fn write_map_args_type_hint<Input, Output, MapFn, Args>(_: &MapFn, args: Args) -> Args
+pub fn write_map_args_type_hint<'a, Input, Output, MapFn, Args>(_: &MapFn, args: Args) -> Args
 where
     MapFn: FnOnce(Input) -> Output,
-    Output: for<'a> BinWrite<Args<'a> = Args>,
+    Output: BinWrite<Args<'a> = Args>,
 {
     args
 }
@@ -212,14 +212,14 @@ pub fn restore_position_variant<S: Seek>(
     }
 }
 
-pub fn write_try_map_args_type_hint<Input, Output, Error, MapFn, Args>(
+pub fn write_try_map_args_type_hint<'a, Input, Output, Error, MapFn, Args>(
     _: &MapFn,
     args: Args,
 ) -> Args
 where
     Error: CustomError,
     MapFn: FnOnce(Input) -> Result<Output, Error>,
-    Output: for<'a> BinWrite<Args<'a> = Args>,
+    Output: BinWrite<Args<'a> = Args>,
 {
     args
 }
