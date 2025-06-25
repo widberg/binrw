@@ -125,10 +125,10 @@ where
     a
 }
 
-pub fn write_function_args_type_hint<T, W, Args, F>(_: &F, a: Args) -> Args
+pub fn write_function_args_type_hint<'a, T, W, Args, F>(_: &F, a: Args) -> Args
 where
     W: Write + Seek,
-    F: FnOnce(&T, &mut W, Endian, Args) -> BinResult<()>,
+    F: FnOnce(&'a T, &mut W, Endian, Args) -> BinResult<()>,
 {
     a
 }
@@ -159,10 +159,10 @@ where
     x
 }
 
-pub fn write_fn_type_hint<T, WriterFn, Writer, Args>(x: WriterFn) -> WriterFn
+pub fn write_fn_type_hint<'a, T, WriterFn, Writer, Args>(x: WriterFn) -> WriterFn
 where
     Writer: Write + Seek,
-    WriterFn: FnOnce(&T, &mut Writer, Endian, Args) -> BinResult<()>,
+    WriterFn: FnOnce(&'a T, &mut Writer, Endian, Args) -> BinResult<()>,
 {
     x
 }
@@ -231,7 +231,7 @@ where
     func
 }
 
-pub fn write_fn_map_output_type_hint<Input, Output, MapFn, Writer, WriteFn, Args>(
+pub fn write_fn_map_output_type_hint<'a, Input, Output, MapFn, Writer, WriteFn, Args>(
     _: &MapFn,
     func: WriteFn,
 ) -> WriteFn
@@ -239,12 +239,12 @@ where
     MapFn: FnOnce(Input) -> Output,
     Args: Clone,
     Writer: Write + Seek,
-    WriteFn: Fn(&Output, &mut Writer, Endian, Args) -> BinResult<()>,
+    WriteFn: Fn(&'a Output, &mut Writer, Endian, Args) -> BinResult<()>,
 {
     func
 }
 
-pub fn write_fn_try_map_output_type_hint<Input, Output, Error, MapFn, Writer, WriteFn, Args>(
+pub fn write_fn_try_map_output_type_hint<'a, Input, Output, Error, MapFn, Writer, WriteFn, Args>(
     _: &MapFn,
     func: WriteFn,
 ) -> WriteFn
@@ -253,7 +253,7 @@ where
     MapFn: FnOnce(Input) -> Result<Output, Error>,
     Args: Clone,
     Writer: Write + Seek,
-    WriteFn: Fn(&Output, &mut Writer, Endian, Args) -> BinResult<()>,
+    WriteFn: Fn(&'a Output, &mut Writer, Endian, Args) -> BinResult<()>,
 {
     func
 }

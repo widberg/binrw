@@ -1,4 +1,4 @@
-use binrw::{binwrite, io::Cursor, BinWrite};
+use binrw::{binwrite, io::Cursor, writer, BinResult, BinWrite};
 
 #[test]
 fn map_field() {
@@ -129,4 +129,64 @@ fn try_map() {
 
     let mut x = Cursor::new(Vec::new());
     MyType { value: 128 }.write_le(&mut x).unwrap_err();
+}
+
+#[test]
+fn map_write_with() {
+    use binrw::prelude::*;
+
+    #[derive(BinWrite)]
+    struct MyType {
+        #[bw(map = |&x| { x as u16 }, write_with = <u16>::write_options)]
+        value: u8,
+    }
+
+    let mut x = Cursor::new(Vec::new());
+    MyType { value: 127 }.write_le(&mut x).unwrap();
+    assert_eq!(x.into_inner(), b"\x7f\0");
+}
+
+#[writer(writer)]
+fn write_as_ref_str<S: AsRef<str>>(value: S) -> BinResult<()> {
+    let bytes = value.as_ref().as_bytes();
+    writer.write_all(bytes)?;
+    Ok(())
+}
+
+#[test]
+fn map_write_with_as_ref_str() {
+    use binrw::prelude::*;
+
+    #[derive(BinWrite)]
+    struct MyType {
+        #[bw(write_with = write_as_ref_str)]
+        value: String,
+    }
+
+    let mut x = Cursor::new(Vec::new());
+    MyType {
+        value: "Hello, World!".to_string(),
+    }
+    .write_le(&mut x)
+    .unwrap();
+    assert_eq!(x.into_inner(), b"Hello, World!");
+}
+
+#[test]
+fn try_map_write_with_as_ref_str() {
+    use binrw::prelude::*;
+
+    #[derive(BinWrite)]
+    struct MyType<'a> {
+        #[bw(try_map = |x| x.clone().ok_or("Option was None"), write_with = write_as_ref_str)]
+        value: Option<&'a str>,
+    }
+
+    let mut x = Cursor::new(Vec::new());
+    MyType {
+        value: Some("Hello, World!"),
+    }
+    .write_le(&mut x)
+    .unwrap();
+    assert_eq!(x.into_inner(), b"Hello, World!");
 }
