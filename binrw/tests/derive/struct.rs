@@ -690,6 +690,102 @@ fn pad_size_to() {
 }
 
 #[test]
+fn align_size_to() {
+    #[derive(binrw::BinRead, Debug, PartialEq)]
+    struct Test {
+        #[br(align_size_to = 3)]
+        a: u32,
+        b: u8,
+    }
+
+    let result =
+        <Test as binrw::BinRead>::read_le(&mut binrw::io::Cursor::new(b"\x01\0\0\0\0\0\x02"))
+            .unwrap();
+    t::assert_eq!(result, Test { a: 1, b: 2 });
+}
+
+fn assert_align_error(err: binrw::Error, keyword: &str) {
+    match err {
+        binrw::Error::AssertFail { message, .. } => {
+            t::assert_eq!(message, t::format!("`{keyword}` must be greater than 0"));
+        }
+        _ => t::panic!("bad error type"),
+    }
+}
+
+#[test]
+fn align_size_to_zero_is_error() {
+    #[derive(binrw::BinRead, Debug, PartialEq)]
+    struct Test {
+        #[br(align_size_to = 0)]
+        a: u8,
+    }
+
+    let err = <Test as binrw::BinRead>::read_le(&mut binrw::io::Cursor::new(b"\x01")).unwrap_err();
+    assert_align_error(err, "align_size_to");
+}
+
+#[test]
+fn align_size_to_negative_is_error() {
+    #[derive(binrw::BinRead, Debug, PartialEq)]
+    struct Test {
+        #[br(align_size_to = -1_i32)]
+        a: u8,
+    }
+
+    let err = <Test as binrw::BinRead>::read_le(&mut binrw::io::Cursor::new(b"\x01")).unwrap_err();
+    assert_align_error(err, "align_size_to");
+}
+
+#[test]
+fn align_before_zero_is_error() {
+    #[derive(binrw::BinRead, Debug, PartialEq)]
+    struct Test {
+        #[br(align_before = 0)]
+        a: u8,
+    }
+
+    let err = <Test as binrw::BinRead>::read_le(&mut binrw::io::Cursor::new(b"\x01")).unwrap_err();
+    assert_align_error(err, "align_before");
+}
+
+#[test]
+fn align_before_negative_is_error() {
+    #[derive(binrw::BinRead, Debug, PartialEq)]
+    struct Test {
+        #[br(align_before = -1_i32)]
+        a: u8,
+    }
+
+    let err = <Test as binrw::BinRead>::read_le(&mut binrw::io::Cursor::new(b"\x01")).unwrap_err();
+    assert_align_error(err, "align_before");
+}
+
+#[test]
+fn align_after_zero_is_error() {
+    #[derive(binrw::BinRead, Debug, PartialEq)]
+    struct Test {
+        #[br(align_after = 0)]
+        a: u8,
+    }
+
+    let err = <Test as binrw::BinRead>::read_le(&mut binrw::io::Cursor::new(b"\x01")).unwrap_err();
+    assert_align_error(err, "align_after");
+}
+
+#[test]
+fn align_after_negative_is_error() {
+    #[derive(binrw::BinRead, Debug, PartialEq)]
+    struct Test {
+        #[br(align_after = -1_i32)]
+        a: u8,
+    }
+
+    let err = <Test as binrw::BinRead>::read_le(&mut binrw::io::Cursor::new(b"\x01")).unwrap_err();
+    assert_align_error(err, "align_after");
+}
+
+#[test]
 fn parse_with_default_args() {
     #[derive(Clone)]
     struct Args(u8);

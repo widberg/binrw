@@ -26,12 +26,16 @@ fn padding_round_trip() {
 
         #[brw(pad_size_to = 0x6_u32)]
         z: u32,
+
+        #[brw(align_size_to = 0x3_u32)]
+        w: u32,
     }
 
     let data = &[
         /* pad_before: */ 0, 0, /* x */ 1, /* align: */ 0, 0, 0, 0, 0,
         /* align_before: (none)*/ /* y */ 2, /* pad_after: */ 0, 0, 0, /* z */ 0,
-        0xab, 0xcd, 0xef, /* pad_size_to */ 0, 0,
+        0xab, 0xcd, 0xef, /* pad_size_to */ 0, 0, /* w */ 0x25,
+        /* align_size_to */ 0, 0, 0, 0, 0,
     ];
     let test = <Test as binrw::BinRead>::read_be(&mut binrw::io::Cursor::new(data)).unwrap();
 
@@ -54,12 +58,16 @@ fn padding_one_way() {
 
         #[brw(pad_size_to = 0x6_u32)]
         z: u32,
+
+        #[brw(align_size_to = 0x3_u32)]
+        w: u32,
     }
 
     let data = &[
         /* pad_before: */ 0, 0, /* x */ 1, /* align: */ 0, 0, 0, 0, 0,
         /* align_before: (none)*/ /* y */ 2, /* pad_after: */ 0, 0, 0, /* z */ 0xef,
-        0xcd, 0xab, 0, /* pad_size_to */ 0, 0,
+        0xcd, 0xab, 0, /* pad_size_to */ 0, 0, /* w */ 0x25, /* align_size_to */ 0,
+        0, 0, 0, 0,
     ];
 
     let mut x = binrw::io::Cursor::new(t::Vec::new());
@@ -69,6 +77,7 @@ fn padding_one_way() {
             x: 1,
             y: 2,
             z: 0xabcdef,
+            w: 0x25,
         },
         &mut x,
         binrw::Endian::Little,
@@ -77,4 +86,91 @@ fn padding_one_way() {
     .unwrap();
 
     t::assert_eq!(x.into_inner(), data);
+}
+
+fn assert_align_error(err: binrw::Error, keyword: &str) {
+    match err {
+        binrw::Error::AssertFail { message, .. } => {
+            t::assert_eq!(message, t::format!("`{keyword}` must be greater than 0"));
+        }
+        _ => t::panic!("bad error type"),
+    }
+}
+
+#[test]
+fn align_size_to_zero_is_error() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(align_size_to = 0)]
+        x: u8,
+    }
+
+    let mut writer = binrw::io::Cursor::new(t::Vec::new());
+    let err = binrw::BinWrite::write_le(&Test { x: 1 }, &mut writer).unwrap_err();
+    assert_align_error(err, "align_size_to");
+}
+
+#[test]
+fn align_size_to_negative_is_error() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(align_size_to = -1_i32)]
+        x: u8,
+    }
+
+    let mut writer = binrw::io::Cursor::new(t::Vec::new());
+    let err = binrw::BinWrite::write_le(&Test { x: 1 }, &mut writer).unwrap_err();
+    assert_align_error(err, "align_size_to");
+}
+
+#[test]
+fn align_before_zero_is_error() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(align_before = 0)]
+        x: u8,
+    }
+
+    let mut writer = binrw::io::Cursor::new(t::Vec::new());
+    let err = binrw::BinWrite::write_le(&Test { x: 1 }, &mut writer).unwrap_err();
+    assert_align_error(err, "align_before");
+}
+
+#[test]
+fn align_before_negative_is_error() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(align_before = -1_i32)]
+        x: u8,
+    }
+
+    let mut writer = binrw::io::Cursor::new(t::Vec::new());
+    let err = binrw::BinWrite::write_le(&Test { x: 1 }, &mut writer).unwrap_err();
+    assert_align_error(err, "align_before");
+}
+
+#[test]
+fn align_after_zero_is_error() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(align_after = 0)]
+        x: u8,
+    }
+
+    let mut writer = binrw::io::Cursor::new(t::Vec::new());
+    let err = binrw::BinWrite::write_le(&Test { x: 1 }, &mut writer).unwrap_err();
+    assert_align_error(err, "align_after");
+}
+
+#[test]
+fn align_after_negative_is_error() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(align_after = -1_i32)]
+        x: u8,
+    }
+
+    let mut writer = binrw::io::Cursor::new(t::Vec::new());
+    let err = binrw::BinWrite::write_le(&Test { x: 1 }, &mut writer).unwrap_err();
+    assert_align_error(err, "align_after");
 }
