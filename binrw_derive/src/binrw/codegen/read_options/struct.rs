@@ -8,10 +8,11 @@ use crate::{
         codegen::{
             get_assertions, get_endian, get_map_err, get_passed_args, get_try_calc,
             sanitization::{
-                make_ident, ARGS_TYPE_HINT, BACKTRACE_FRAME, BINREAD_TRAIT, COERCE_FN,
-                DBG_EPRINTLN, MAP_ARGS_TYPE_HINT, MAP_READER_TYPE_HINT, OPT, PARSE_FN_TYPE_HINT,
-                POS, READER, READ_FUNCTION, READ_METHOD, REQUIRED_ARG_TRAIT, SAVED_POSITION,
-                SEEK_FROM, SEEK_TRAIT, TEMP, THIS, WITH_CONTEXT,
+                make_ident, ARGS_TYPE_HINT, ASSERT, ASSERT_ERROR_FN, BACKTRACE_FRAME,
+                BINREAD_TRAIT, COERCE_FN, DBG_EPRINTLN, MAP_ARGS_TYPE_HINT, MAP_READER_TYPE_HINT,
+                OPT, PARSE_FN_TYPE_HINT, POS, READER, READ_FUNCTION, READ_METHOD,
+                REQUIRED_ARG_TRAIT, SAVED_POSITION, SEEK_FROM, SEEK_TRAIT, TEMP, THIS,
+                WITH_CONTEXT,
             },
         },
         parser::{ErrContext, FieldMode, Input, Map, Struct, StructField},
@@ -238,6 +239,8 @@ impl<'field> FieldGenerator<'field> {
             let dbg_align_before = dbg_space("align_before", &at, self.field.align_before.as_ref());
             let dbg_pad_size_to = dbg_space("pad_size_to", &at, self.field.pad_size_to.as_ref());
             let dbg_pad_after = dbg_space("pad_after", &at, self.field.pad_after.as_ref());
+            let dbg_align_size_to =
+                dbg_space("align_size_to", &at, self.field.align_size_to.as_ref());
             let dbg_align_after = dbg_space("align_after", &at, self.field.align_after.as_ref());
 
             self.out = quote! {{
@@ -251,6 +254,7 @@ impl<'field> FieldGenerator<'field> {
                 );
                 #dbg_pad_size_to
                 #dbg_pad_after
+                #dbg_align_size_to
                 #dbg_align_after
                 #TEMP
             }};
@@ -616,14 +620,19 @@ fn generate_seek_after(reader_var: &TokenStream, field: &StructField) -> TokenSt
         .pad_after
         .as_ref()
         .map(|value| map_pad(reader_var, value));
+    let align_size_to = field
+        .align_size_to
+        .as_ref()
+        .map(|value| map_align_size_to(reader_var, value));
     let align_after = field
         .align_after
         .as_ref()
-        .map(|value| map_align(reader_var, value));
+        .map(|value| map_align(reader_var, value, "align_after"));
 
     quote! {
         #pad_size_to
         #pad_after
+        #align_size_to
         #align_after
     }
 }
@@ -641,12 +650,16 @@ fn generate_seek_before(reader_var: &TokenStream, field: &StructField) -> TokenS
     let align_before = field
         .align_before
         .as_ref()
-        .map(|value| map_align(reader_var, value));
-    let pad_size_to_before = field.pad_size_to.as_ref().map(|_| {
-        quote! {
-            let #POS = #SEEK_TRAIT::stream_position(#reader_var)?;
-        }
-    });
+        .map(|value| map_align(reader_var, value, "align_before"));
+    let pad_size_to_before = field
+        .pad_size_to
+        .as_ref()
+        .or(field.align_size_to.as_ref())
+        .map(|_| {
+            quote! {
+                let #POS = #SEEK_TRAIT::stream_position(#reader_var)?;
+            }
+        });
 
     quote! {
         #seek_before
@@ -685,11 +698,38 @@ fn make_field_vars(
     (reader_var, endian_var, args_var)
 }
 
-fn map_align(reader_var: &TokenStream, align: &TokenStream) -> TokenStream {
+fn map_align(
+    reader_var: &TokenStream,
+    align: &TokenStream,
+    align_name: &'static str,
+) -> TokenStream {
+    let size = quote! { #SEEK_TRAIT::stream_position(#reader_var)? as ::core::primitive::i64 };
+    map_align_from_size(reader_var, align, &size, align_name)
+}
+
+fn map_align_size_to(reader_var: &TokenStream, align: &TokenStream) -> TokenStream {
+    let size =
+        quote! { (#SEEK_TRAIT::stream_position(#reader_var)? - #POS) as ::core::primitive::i64 };
+    map_align_from_size(reader_var, align, &size, "align_size_to")
+}
+
+fn map_align_from_size(
+    reader_var: &TokenStream,
+    align: &TokenStream,
+    size: &TokenStream,
+    align_name: &'static str,
+) -> TokenStream {
     quote! {{
         let align = (#align) as ::core::primitive::i64;
-        let pos = #SEEK_TRAIT::stream_position(#reader_var)? as ::core::primitive::i64;
-        #SEEK_TRAIT::seek(#reader_var, #SEEK_FROM::Current((align - (pos % align)) % align))?;
+        #ASSERT(
+            align > 0,
+            #SEEK_TRAIT::stream_position(#reader_var)?,
+            #ASSERT_ERROR_FN::<_, fn() -> !>::Message(|| {
+                ::core::concat!("`", #align_name, "` must be greater than 0")
+            }),
+        )?;
+        let size = #size;
+        #SEEK_TRAIT::seek(#reader_var, #SEEK_FROM::Current((align - (size % align)) % align))?;
     }}
 }
 

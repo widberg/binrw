@@ -3,12 +3,12 @@ use crate::{
         codegen::{
             get_assertions, get_endian, get_map_err, get_passed_args, get_try_calc,
             sanitization::{
-                make_ident, BEFORE_POS, BINWRITE_TRAIT, MAP_WRITER_TYPE_HINT, POS,
-                REQUIRED_ARG_TRAIT, SAVED_POSITION, SEEK_FROM, SEEK_TRAIT, WRITE_ARGS_TYPE_HINT,
-                WRITE_FN_MAP_OUTPUT_TYPE_HINT, WRITE_FN_TRY_MAP_OUTPUT_TYPE_HINT,
-                WRITE_FN_TYPE_HINT, WRITE_FUNCTION, WRITE_MAP_ARGS_TYPE_HINT,
-                WRITE_MAP_INPUT_TYPE_HINT, WRITE_METHOD, WRITE_TRY_MAP_ARGS_TYPE_HINT,
-                WRITE_ZEROES,
+                make_ident, ASSERT, ASSERT_ERROR_FN, BEFORE_POS, BINWRITE_TRAIT,
+                MAP_WRITER_TYPE_HINT, POS, REQUIRED_ARG_TRAIT, SAVED_POSITION, SEEK_FROM,
+                SEEK_TRAIT, WRITE_ARGS_TYPE_HINT, WRITE_FN_MAP_OUTPUT_TYPE_HINT,
+                WRITE_FN_TRY_MAP_OUTPUT_TYPE_HINT, WRITE_FN_TYPE_HINT, WRITE_FUNCTION,
+                WRITE_MAP_ARGS_TYPE_HINT, WRITE_MAP_INPUT_TYPE_HINT, WRITE_METHOD,
+                WRITE_TRY_MAP_ARGS_TYPE_HINT, WRITE_ZEROES,
             },
         },
         parser::{FieldMode, Map, StructField},
@@ -342,6 +342,30 @@ fn map_func_ident(ident: &Ident) -> Ident {
     make_ident(ident, "map_func")
 }
 
+fn map_align_padding(
+    writer_var: &TokenStream,
+    align: &TokenStream,
+    size: &TokenStream,
+    pos: &TokenStream,
+    align_name: &'static str,
+) -> TokenStream {
+    quote! {{
+        let align = (#align) as ::core::primitive::i64;
+        #ASSERT(
+            align > 0,
+            #pos,
+            #ASSERT_ERROR_FN::<_, fn() -> !>::Message(|| {
+                ::core::concat!("`", #align_name, "` must be greater than 0")
+            }),
+        )?;
+        let align = align as ::core::primitive::u64;
+        let rem = (#size) % align;
+        if rem != 0 {
+            #WRITE_ZEROES(#writer_var, align - rem)?;
+        }
+    }}
+}
+
 fn pad_after(writer_var: &TokenStream, field: &StructField) -> TokenStream {
     let pad_size_to = field.pad_size_to.as_ref().map(|size| {
         quote! {{
@@ -359,14 +383,32 @@ fn pad_after(writer_var: &TokenStream, field: &StructField) -> TokenStream {
             #WRITE_ZEROES(#writer_var, (#padding) as ::core::primitive::u64)?;
         }
     });
+    let align_size_to = field.align_size_to.as_ref().map(|alignment| {
+        let align_size_to = map_align_padding(
+            writer_var,
+            alignment,
+            &quote! { size },
+            &quote! { after_pos },
+            "align_size_to",
+        );
+        quote! {{
+            let after_pos = #SEEK_TRAIT::stream_position(#writer_var)?;
+            if let ::core::option::Option::Some(size) = after_pos.checked_sub(#BEFORE_POS) {
+                #align_size_to
+            }
+        }}
+    });
     let align_after = field.align_after.as_ref().map(|alignment| {
+        let align_after = map_align_padding(
+            writer_var,
+            alignment,
+            &quote! { pos },
+            &quote! { pos },
+            "align_after",
+        );
         quote! {{
             let pos = #SEEK_TRAIT::stream_position(#writer_var)?;
-            let align = ((#alignment) as ::core::primitive::u64);
-            let rem = pos % align;
-            if rem != 0 {
-                #WRITE_ZEROES(#writer_var, align - rem)?;
-            }
+            #align_after
         }}
     });
     let restore_position = field.restore_position.map(|()| {
@@ -378,6 +420,7 @@ fn pad_after(writer_var: &TokenStream, field: &StructField) -> TokenStream {
     quote! {
         #pad_size_to
         #pad_after
+        #align_size_to
         #align_after
         #restore_position
     }
@@ -398,20 +441,27 @@ fn pad_before(writer_var: &TokenStream, field: &StructField) -> TokenStream {
         }
     });
     let align_before = field.align_before.as_ref().map(|alignment| {
+        let align_before = map_align_padding(
+            writer_var,
+            alignment,
+            &quote! { pos },
+            &quote! { pos },
+            "align_before",
+        );
         quote! {{
             let pos = #SEEK_TRAIT::stream_position(#writer_var)?;
-            let align = ((#alignment) as ::core::primitive::u64);
-            let rem = pos % align;
-            if rem != 0 {
-                #WRITE_ZEROES(#writer_var, align - rem)?;
-            }
+            #align_before
         }}
     });
-    let pad_size_to_before = field.pad_size_to.as_ref().map(|_| {
-        quote! {
-            let #BEFORE_POS = #SEEK_TRAIT::stream_position(#writer_var)?;
-        }
-    });
+    let pad_size_to_before = field
+        .pad_size_to
+        .as_ref()
+        .or(field.align_size_to.as_ref())
+        .map(|_| {
+            quote! {
+                let #BEFORE_POS = #SEEK_TRAIT::stream_position(#writer_var)?;
+            }
+        });
     let store_position = field.restore_position.map(|()| {
         quote! {
             let #SAVED_POSITION = #SEEK_TRAIT::stream_position(#writer_var)?;
