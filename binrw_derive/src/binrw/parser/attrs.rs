@@ -44,3 +44,4 @@ pub(super) type Try = MetaVoid<Token![try]>;
 pub(super) type TryCalc = MetaExpr<kw::try_calc>;
 pub(super) type TryMap = MetaExpr<kw::try_map>;
 pub(super) type WriteWith = MetaExpr<kw::write_with>;
+pub(super) type FillValue = MetaExpr<kw::write_with>;

@@ -58,6 +58,8 @@ attr_struct! {
         pub(crate) pad_size_to: Option<TokenStream>,
         #[from(RO:Debug)] // TODO is this really RO?
         pub(crate) debug: Option<()>,
+        #[from(WO:FillValue)]
+        pub(crate) fill_value: Option<TokenStream>,
     }
 }
 
@@ -128,7 +130,8 @@ impl StructField {
                 align_after,
                 seek_before,
                 pad_size_to,
-                magic
+                magic,
+                fill_value
             )
     }
 
@@ -200,6 +203,22 @@ impl StructField {
             }
         }
 
+        if self.fill_value.is_some()
+            && self.pad_size_to.is_none()
+            && self.pad_after.is_none()
+            && self.align_after.is_none()
+            && self.pad_before.is_none()
+            && self.align_before.is_none()
+        {
+            combine_error(
+                &mut all_errors,
+                syn::Error::new(
+                    self.fill_value.span(),
+                    "`fill_value` can only be used with `pad_size_to`, `pad_after`, `align_after`, `pad_before`, and `align_before`",
+                ),
+            );
+        }
+
         if let Some(error) = all_errors {
             Err(error)
         } else {
@@ -243,6 +262,7 @@ impl FromField for StructField {
             keyword_spans: <_>::default(),
             err_context: <_>::default(),
             debug: <_>::default(),
+            fill_value: <_>::default(),
         };
 
         let result = if options.write {

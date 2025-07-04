@@ -60,6 +60,7 @@ ident_str! {
     pub(crate) RESTORE_POSITION = from_crate!(__private::restore_position);
     pub(crate) RESTORE_POSITION_VARIANT = from_crate!(__private::restore_position_variant);
     pub(crate) WRITE_ZEROES = from_crate!(__private::write_zeroes);
+    pub(crate) WRITE_VALUES = from_crate!(__private::write_values);
     pub(crate) ARGS_MACRO = from_crate!(args);
     pub(crate) META_ENDIAN_KIND = from_crate!(meta::EndianKind);
     pub(crate) READ_ENDIAN = from_crate!(meta::ReadEndian);

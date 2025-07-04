@@ -8,7 +8,7 @@ use crate::{
                 WRITE_FN_MAP_OUTPUT_TYPE_HINT, WRITE_FN_TRY_MAP_OUTPUT_TYPE_HINT,
                 WRITE_FN_TYPE_HINT, WRITE_FUNCTION, WRITE_MAP_ARGS_TYPE_HINT,
                 WRITE_MAP_INPUT_TYPE_HINT, WRITE_METHOD, WRITE_TRY_MAP_ARGS_TYPE_HINT,
-                WRITE_ZEROES,
+                WRITE_VALUES, WRITE_ZEROES,
             },
         },
         parser::{FieldMode, Map, StructField},
@@ -344,28 +344,37 @@ fn map_func_ident(ident: &Ident) -> Ident {
 
 fn pad_after(writer_var: &TokenStream, field: &StructField) -> TokenStream {
     let pad_size_to = field.pad_size_to.as_ref().map(|size| {
+        let fill = field.fill_value.as_ref().map_or_else(
+            || quote! { #WRITE_ZEROES(#writer_var, padding)?; },
+            |value| quote! { #WRITE_VALUES(#writer_var, padding, #value)?; },
+        );
         quote! {{
             let pad_to_size = (#size) as u64;
             let after_pos = #SEEK_TRAIT::stream_position(#writer_var)?;
             if let Some(size) = after_pos.checked_sub(#BEFORE_POS) {
                 if let Some(padding) = pad_to_size.checked_sub(size) {
-                    #WRITE_ZEROES(#writer_var, padding)?;
+                    #fill
                 }
             }
         }}
     });
     let pad_after = field.pad_after.as_ref().map(|padding| {
-        quote! {
-            #WRITE_ZEROES(#writer_var, (#padding) as u64)?;
-        }
+        field.fill_value.as_ref().map_or_else(
+            || quote! { #WRITE_ZEROES(#writer_var, (#padding) as u64)?; },
+            |value| quote! { #WRITE_VALUES(#writer_var, (#padding) as u64, #value)?; },
+        )
     });
     let align_after = field.align_after.as_ref().map(|alignment| {
+        let fill = field.fill_value.as_ref().map_or_else(
+            || quote! { #WRITE_ZEROES(#writer_var, align - rem)?; },
+            |value| quote! { #WRITE_VALUES(#writer_var, align - rem, #value)?; },
+        );
         quote! {{
             let pos = #SEEK_TRAIT::stream_position(#writer_var)?;
             let align = ((#alignment) as u64);
             let rem = pos % align;
             if rem != 0 {
-                #WRITE_ZEROES(#writer_var, align - rem)?;
+                #fill
             }
         }}
     });
@@ -393,17 +402,22 @@ fn pad_before(writer_var: &TokenStream, field: &StructField) -> TokenStream {
         }
     });
     let pad_before = field.pad_before.as_ref().map(|padding| {
-        quote! {
-            #WRITE_ZEROES(#writer_var, (#padding) as u64)?;
-        }
+        field.fill_value.as_ref().map_or_else(
+            || quote! { #WRITE_ZEROES(#writer_var, (#padding) as u64)?; },
+            |value| quote! { #WRITE_VALUES(#writer_var, (#padding) as u64, #value)?; },
+        )
     });
     let align_before = field.align_before.as_ref().map(|alignment| {
+        let fill = field.fill_value.as_ref().map_or_else(
+            || quote! { #WRITE_ZEROES(#writer_var, align - rem)?; },
+            |value| quote! { #WRITE_VALUES(#writer_var, align - rem, #value)?; },
+        );
         quote! {{
             let pos = #SEEK_TRAIT::stream_position(#writer_var)?;
             let align = ((#alignment) as u64);
             let rem = pos % align;
             if rem != 0 {
-                #WRITE_ZEROES(#writer_var, align - rem)?;
+                #fill
             }
         }}
     });

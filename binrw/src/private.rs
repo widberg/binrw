@@ -282,6 +282,30 @@ pub fn write_zeroes<W: Write>(writer: &mut W, count: u64) -> BinResult<()> {
     Ok(())
 }
 
+pub fn write_values<W: Write>(writer: &mut W, count: u64, value: u8) -> BinResult<()> {
+    const BUF_SIZE: u16 = 0x20;
+    let values: [u8; BUF_SIZE as usize] = [value; BUF_SIZE as usize];
+
+    if count <= BUF_SIZE.into() {
+        // Lint: `count` is guaranteed to be <= BUF_SIZE
+        #[allow(clippy::cast_possible_truncation)]
+        writer.write_all(&values[..count as usize])?;
+    } else {
+        let full_chunks = count / u64::from(BUF_SIZE);
+        let remaining = count % u64::from(BUF_SIZE);
+
+        for _ in 0..full_chunks {
+            writer.write_all(&values)?;
+        }
+
+        // Lint: `remaining` is guaranteed to be < BUF_SIZE
+        #[allow(clippy::cast_possible_truncation)]
+        writer.write_all(&values[..remaining as usize])?;
+    }
+
+    Ok(())
+}
+
 #[cfg(feature = "std")]
 pub use std::eprintln;
 

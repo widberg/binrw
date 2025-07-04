@@ -48,4 +48,5 @@ define_keywords! {
     try_calc,
     try_map,
     write_with,
+    fill_value,
 }
