@@ -1,24 +1,32 @@
-use crate::{binrw::parser::attrs, meta_types::KeywordToken};
+use std::collections::HashSet;
+
+use crate::{
+    binrw::parser::{attrs, TrySet},
+    meta_types::KeywordToken,
+};
 use syn::{punctuated::Punctuated, Token, WherePredicate};
 
-use super::SpannedValue;
-
-pub(crate) type Bound = Option<SpannedValue<Inner>>;
-
 #[derive(Clone, Debug)]
-pub(crate) struct Inner(Punctuated<WherePredicate, Token![,]>);
+pub(crate) enum Bound {
+    Implicit(HashSet<syn::TypePath>),
+    Explicit(Punctuated<WherePredicate, Token![,]>),
+}
 
-impl Inner {
-    pub(crate) fn predicates(&self) -> &Punctuated<WherePredicate, Token![,]> {
-        &self.0
+impl Default for Bound {
+    fn default() -> Self {
+        Self::Implicit(HashSet::default())
     }
 }
 
-impl TryFrom<attrs::Bound> for SpannedValue<Inner> {
-    type Error = syn::Error;
+impl From<attrs::Bound> for Bound {
+    fn from(bound: attrs::Bound) -> Self {
+        Self::Explicit(bound.fields)
+    }
+}
 
-    fn try_from(bound: attrs::Bound) -> Result<Self, Self::Error> {
-        let kw_span = bound.keyword_span();
-        Ok(Self::new(Inner(bound.fields), kw_span))
+impl<T: Into<Bound> + KeywordToken> TrySet<Bound> for T {
+    fn try_set(self, to: &mut Bound) -> syn::Result<()> {
+        *to = self.into();
+        Ok(())
     }
 }

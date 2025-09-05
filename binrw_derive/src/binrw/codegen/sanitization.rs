@@ -67,6 +67,7 @@ ident_str! {
     pub(crate) DBG_EPRINTLN = from_crate!(__private::eprintln);
     pub(crate) FORMAT = from_crate!(__private::format);
     pub(crate) VEC = from_crate!(__private::Vec);
+    pub(crate) DEFAULT = from_crate!(__private::Default);
 }
 
 pub(crate) const READER: IdentStr = IdentStr::new_hygienic("__binrw_generated_var_reader");

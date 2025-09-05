@@ -121,12 +121,8 @@ pub use binrw_derive::binrw;
 /// }
 ///
 /// #[binread]
-/// #[br(import_raw(args: GlobalArgs<T::Args<'_>>))]
-/// struct Container<T>
-/// where
-///     T: BinRead + 'static,
-///     for<'a> T::Args<'a>: Clone,
-/// {
+/// #[br(import_raw(args: GlobalArgs<T::Args<'_>>), bound(for<'a> T: BinRead + 'a, for<'a> <T as BinRead>::Args<'a>: Clone))]
+/// struct Container<T> {
 ///     #[br(temp, if(args.version > 1, 16))]
 ///     count: u16,
 ///     #[br(args {
