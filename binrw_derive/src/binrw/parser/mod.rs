@@ -6,6 +6,8 @@ mod top_level_attrs;
 mod try_set;
 mod types;
 
+use std::collections::HashSet;
+
 use crate::meta_types::MetaAttrList;
 use crate::{
     binrw::{is_binread_attr, is_binwrite_attr, Options},
@@ -76,7 +78,12 @@ trait FromAttrs<Attr: syn::parse::Parse> {
 trait FromField {
     type In;
 
-    fn from_field(field: &Self::In, index: usize, options: Options) -> ParseResult<Self>
+    fn from_field(
+        field: &Self::In,
+        index: usize,
+        generic_type_params: &HashSet<syn::Ident>,
+        options: Options,
+    ) -> ParseResult<Self>
     where
         Self: Sized;
 }
@@ -87,6 +94,7 @@ trait FromInput<Attr: syn::parse::Parse>: FromAttrs<Attr> {
     fn from_input<'input>(
         attrs: &'input [syn::Attribute],
         fields: impl Iterator<Item = &'input <Self::Field as FromField>::In>,
+        generic_type_params: &HashSet<syn::Ident>,
         options: Options,
     ) -> ParseResult<Self>
     where
@@ -98,9 +106,9 @@ trait FromInput<Attr: syn::parse::Parse>: FromAttrs<Attr> {
 
         for (index, field) in fields.enumerate() {
             let (field, mut field_error) =
-                Self::Field::from_field(field, index, options).unwrap_tuple();
+                Self::Field::from_field(field, index, generic_type_params, options).unwrap_tuple();
             if field_error.is_none() {
-                field_error = this.push_field(field).err();
+                field_error = this.push_field(field, generic_type_params).err();
             }
 
             if let Some(field_error) = field_error {
@@ -119,7 +127,11 @@ trait FromInput<Attr: syn::parse::Parse>: FromAttrs<Attr> {
         }
     }
 
-    fn push_field(&mut self, field: Self::Field) -> syn::Result<()>;
+    fn push_field(
+        &mut self,
+        field: Self::Field,
+        generic_type_params: &HashSet<syn::Ident>,
+    ) -> syn::Result<()>;
 
     fn set_options(&mut self, _: Options) {}
 

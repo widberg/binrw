@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{
     attr_struct,
     top_level_attrs::StructAttr,
@@ -211,7 +213,12 @@ impl StructField {
 impl FromField for StructField {
     type In = syn::Field;
 
-    fn from_field(field: &Self::In, index: usize, options: Options) -> ParseResult<Self> {
+    fn from_field(
+        field: &Self::In,
+        index: usize,
+        _: &HashSet<syn::Ident>,
+        options: Options,
+    ) -> ParseResult<Self> {
         let this = Self {
             ident: field
                 .ident
@@ -295,7 +302,12 @@ impl From<UnitEnumField> for Struct {
 impl FromField for UnitEnumField {
     type In = syn::Variant;
 
-    fn from_field(field: &Self::In, _: usize, options: Options) -> ParseResult<Self> {
+    fn from_field(
+        field: &Self::In,
+        _: usize,
+        _: &HashSet<syn::Ident>,
+        options: Options,
+    ) -> ParseResult<Self> {
         let this = Self {
             ident: field.ident.clone(),
             magic: <_>::default(),
@@ -357,18 +369,25 @@ impl From<EnumVariant> for Struct {
 impl FromField for EnumVariant {
     type In = syn::Variant;
 
-    fn from_field(variant: &Self::In, index: usize, options: Options) -> ParseResult<Self> {
+    fn from_field(
+        variant: &Self::In,
+        index: usize,
+        generic_type_params: &HashSet<syn::Ident>,
+        options: Options,
+    ) -> ParseResult<Self> {
         match variant.fields {
             syn::Fields::Named(_) | syn::Fields::Unnamed(_) => if options.write {
                 <Struct as FromInput<StructAttr<true>>>::from_input(
                     &variant.attrs,
                     variant.fields.iter(),
+                    generic_type_params,
                     options,
                 )
             } else {
                 <Struct as FromInput<StructAttr<false>>>::from_input(
                     &variant.attrs,
                     variant.fields.iter(),
+                    generic_type_params,
                     options,
                 )
             }
@@ -376,7 +395,10 @@ impl FromField for EnumVariant {
                 ident: variant.ident.clone(),
                 options: Box::new(options),
             }),
-            syn::Fields::Unit => UnitEnumField::from_field(variant, index, options).map(Self::Unit),
+            syn::Fields::Unit => {
+                UnitEnumField::from_field(variant, index, generic_type_params, options)
+                    .map(Self::Unit)
+            }
         }
     }
 }

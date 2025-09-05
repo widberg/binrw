@@ -1,12 +1,14 @@
+use std::collections::HashSet;
+
 use super::{
     attr_struct,
     types::{Assert, CondEndian, EnumErrorMode, Imports, Magic, Map},
     Bound, EnumVariant, FromInput, ParseResult, StructField, TrySet, UnitEnumField,
 };
-use crate::binrw::Options;
+use crate::binrw::{parser::FieldMode, Options};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::{spanned::Spanned, Ident};
+use syn::{parse_quote_spanned, spanned::Spanned, Ident};
 
 /// The parsed representation of binrw attributes on a data structure.
 pub(crate) enum Input {
@@ -25,18 +27,25 @@ impl Input {
     pub(crate) fn from_input(input: &syn::DeriveInput, options: Options) -> ParseResult<Self> {
         let attrs = &input.attrs;
         let ident = Some(&input.ident);
+        let generic_type_params: HashSet<syn::Ident> = input
+            .generics
+            .type_params()
+            .map(|param| param.ident.clone())
+            .collect();
         match &input.data {
             syn::Data::Struct(st) => {
                 let read_struct = if options.write {
                     <Struct as FromInput<StructAttr<true>>>::from_input(
                         attrs,
                         st.fields.iter(),
+                        &generic_type_params,
                         options,
                     )
                 } else {
                     <Struct as FromInput<StructAttr<false>>>::from_input(
                         attrs,
                         st.fields.iter(),
+                        &generic_type_params,
                         options,
                     )
                 };
@@ -62,12 +71,14 @@ impl Input {
                         <UnitOnlyEnum as FromInput<UnitEnumAttr<true>>>::from_input(
                             attrs,
                             variants.iter(),
+                            &generic_type_params,
                             options,
                         )
                     } else {
                         <UnitOnlyEnum as FromInput<UnitEnumAttr<false>>>::from_input(
                             attrs,
                             variants.iter(),
+                            &generic_type_params,
                             options,
                         )
                     }
@@ -77,12 +88,14 @@ impl Input {
                         <Enum as FromInput<EnumAttr<true>>>::from_input(
                             attrs,
                             variants.iter(),
+                            &generic_type_params,
                             options,
                         )
                     } else {
                         <Enum as FromInput<EnumAttr<false>>>::from_input(
                             attrs,
                             variants.iter(),
+                            &generic_type_params,
                             options,
                         )
                     }
@@ -175,11 +188,11 @@ impl Input {
         }
     }
 
-    pub(crate) fn bound(&self) -> &Bound {
+    pub(crate) fn bound(&self) -> Option<&Bound> {
         match self {
-            Input::Struct(s) | Input::UnitStruct(s) => &s.bound,
-            Input::Enum(e) => &e.bound,
-            Input::UnitOnlyEnum(_) => &None,
+            Input::Struct(s) | Input::UnitStruct(s) => Some(&s.bound),
+            Input::Enum(e) => Some(&e.bound),
+            Input::UnitOnlyEnum(_) => None,
         }
     }
 
@@ -276,7 +289,30 @@ impl Struct {
 impl<const WRITE: bool> FromInput<StructAttr<WRITE>> for Struct {
     type Field = StructField;
 
-    fn push_field(&mut self, field: Self::Field) -> syn::Result<()> {
+    fn push_field(
+        &mut self,
+        field: Self::Field,
+        generic_type_params: &HashSet<syn::Ident>,
+    ) -> syn::Result<()> {
+        if let Bound::Implicit(type_paths) = &mut self.bound {
+            if !generic_type_params.is_empty() {
+                let generic_params_in_ty =
+                    find_generic_params_in_ty(generic_type_params, &field.ty);
+                if !generic_params_in_ty.is_empty() && field.args.is_some() {
+                    return Err(syn::Error::new(
+                        field.field.span(),
+                        "`args` on generic fields requires `bound`",
+                    ));
+                }
+
+                if (WRITE && !matches!(field.field_mode, FieldMode::Function(_)))
+                    || (!WRITE && matches!(field.field_mode, FieldMode::Normal))
+                {
+                    type_paths.extend(generic_params_in_ty);
+                }
+            }
+        }
+
         self.fields.push(field);
         Ok(())
     }
@@ -346,7 +382,22 @@ attr_struct! {
 impl<const WRITE: bool> FromInput<EnumAttr<WRITE>> for Enum {
     type Field = EnumVariant;
 
-    fn push_field(&mut self, field: Self::Field) -> syn::Result<()> {
+    fn push_field(&mut self, field: Self::Field, _: &HashSet<syn::Ident>) -> syn::Result<()> {
+        if let EnumVariant::Variant { ident, options } = &field {
+            match (&mut self.bound, &options.bound) {
+                (Bound::Implicit(self_type_paths), Bound::Implicit(options_type_paths)) => {
+                    self_type_paths.extend(options_type_paths.iter().cloned());
+                }
+                (Bound::Explicit(_), Bound::Implicit(_)) => {}
+                (_, Bound::Explicit(_)) => {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        "cannot use `bound` on enum variants",
+                    ))
+                }
+            }
+        }
+
         self.variants.push(field);
         Ok(())
     }
@@ -394,7 +445,7 @@ impl UnitOnlyEnum {
 impl<const WRITE: bool> FromInput<UnitEnumAttr<WRITE>> for UnitOnlyEnum {
     type Field = UnitEnumField;
 
-    fn push_field(&mut self, field: Self::Field) -> syn::Result<()> {
+    fn push_field(&mut self, field: Self::Field, _: &HashSet<syn::Ident>) -> syn::Result<()> {
         if let (Some(repr), Some(magic)) = (self.map.as_repr(), field.magic.as_ref()) {
             let magic_span = magic.span();
             let span = magic_span.join(repr.span()).unwrap_or(magic_span);
@@ -418,4 +469,121 @@ impl<const WRITE: bool> FromInput<UnitEnumAttr<WRITE>> for UnitOnlyEnum {
             Err(syn::Error::new(proc_macro2::Span::call_site(), "BinRead on unit-like enums requires either `#[br(repr = ...)]` on the enum or `#[br(magic = ...)]` on at least one variant"))
         }
     }
+}
+
+fn find_generic_params_in_ty(
+    generic_type_params: &HashSet<syn::Ident>,
+    ty: &syn::Type,
+) -> HashSet<syn::TypePath> {
+    // AST visitor adapted from serde
+    // https://github.com/serde-rs/serde/blob/b9de3658ad9ca7850c496e0f990d5241b943eefb/serde_derive/src/bound.rs#L91
+    struct FindTyParams<'p> {
+        generic_type_params: &'p HashSet<syn::Ident>,
+        result: HashSet<syn::TypePath>,
+    }
+
+    pub fn ungroup(mut ty: &syn::Type) -> &syn::Type {
+        while let syn::Type::Group(group) = ty {
+            ty = &group.elem;
+        }
+        ty
+    }
+
+    impl<'p> FindTyParams<'p> {
+        fn new(generic_type_params: &'p HashSet<syn::Ident>) -> Self {
+            Self {
+                generic_type_params,
+                result: HashSet::new(),
+            }
+        }
+
+        fn visit_field_type(&mut self, ty: &syn::Type) {
+            if let syn::Type::Path(ty) = ungroup(ty) {
+                if let Some(syn::punctuated::Pair::Punctuated(t, _)) =
+                    ty.path.segments.pairs().next()
+                {
+                    if self.generic_type_params.contains(&t.ident) {
+                        self.result.insert(ty.clone());
+                    }
+                }
+            }
+            self.visit_type(ty);
+        }
+
+        fn visit_path(&mut self, path: &syn::Path) {
+            if let Some(seg) = path.segments.last() {
+                // We know PhantomData<T> will always impl BinRead/BinWrite so
+                // we don't count this T as a relevant type param.
+                if seg.ident == "PhantomData" {
+                    return;
+                }
+            }
+            if path.leading_colon.is_none() && path.segments.len() == 1 {
+                let id = &path.segments[0].ident;
+                if self.generic_type_params.contains(id) {
+                    self.result.insert(parse_quote_spanned! {id.span()=>
+                        #id
+                    });
+                }
+            }
+            for segment in &path.segments {
+                self.visit_path_arguments(&segment.arguments);
+            }
+        }
+
+        fn visit_type(&mut self, ty: &syn::Type) {
+            match ty {
+                syn::Type::Array(ty) => self.visit_type(&ty.elem),
+                syn::Type::Group(ty) => self.visit_type(&ty.elem),
+                syn::Type::Paren(ty) => self.visit_type(&ty.elem),
+                syn::Type::Path(ty) => {
+                    if let Some(qself) = &ty.qself {
+                        self.visit_type(&qself.ty);
+                    }
+                    self.visit_path(&ty.path);
+                }
+                syn::Type::Ptr(ty) => self.visit_type(&ty.elem),
+                syn::Type::Reference(ty) => self.visit_type(&ty.elem),
+                syn::Type::Slice(ty) => self.visit_type(&ty.elem),
+                syn::Type::Tuple(ty) => {
+                    for elem in &ty.elems {
+                        self.visit_type(elem);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        fn visit_path_arguments(&mut self, arguments: &syn::PathArguments) {
+            match arguments {
+                syn::PathArguments::None => {}
+                syn::PathArguments::AngleBracketed(arguments) => {
+                    for arg in &arguments.args {
+                        match arg {
+                            syn::GenericArgument::Type(arg) => self.visit_type(arg),
+                            syn::GenericArgument::AssocType(arg) => self.visit_type(&arg.ty),
+                            _ => {}
+                        }
+                    }
+                }
+                syn::PathArguments::Parenthesized(arguments) => {
+                    for argument in &arguments.inputs {
+                        self.visit_type(argument);
+                    }
+                    self.visit_return_type(&arguments.output);
+                }
+            }
+        }
+
+        fn visit_return_type(&mut self, return_type: &syn::ReturnType) {
+            match return_type {
+                syn::ReturnType::Default => {}
+                syn::ReturnType::Type(_, output) => self.visit_type(output),
+            }
+        }
+    }
+
+    let mut visitor = FindTyParams::new(generic_type_params);
+    visitor.visit_field_type(ty);
+    visitor.result
 }

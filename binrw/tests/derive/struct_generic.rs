@@ -16,7 +16,7 @@ fn derive_generic() {
 #[test]
 fn derive_generic_bound() {
     #[derive(binrw::BinRead)]
-    #[br(bound(T: for<'a> binrw::BinRead<Args<'a> = ()> + t::Default))]
+    #[br(bound(T: for<'a> binrw::BinRead<Args<'a> = ()>))]
     struct Test<T> {
         a: [T; 3],
     }
