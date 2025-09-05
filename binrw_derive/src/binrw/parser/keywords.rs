@@ -18,6 +18,7 @@ define_keywords! {
     br,
     brw,
     binwrite,
+    bound,
     bw,
     calc,
     count,

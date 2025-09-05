@@ -21,3 +21,20 @@ fn derive_allows_default() {
     .unwrap();
     t::assert_eq!(b"\0\0\x01", &result[..]);
 }
+
+#[test]
+fn derive_generic_bound() {
+    #[derive(binrw::BinWrite)]
+    #[bw(bound(for<'a> T: binrw::BinWrite + 'a, for<'a> T::Args<'a>: t::Default + t::Clone))]
+    struct Test<T> {
+        a: [T; 3],
+    }
+
+    let mut result = t::Vec::new();
+    binrw::BinWrite::write_le(
+        &Test::<u8> { a: [0, 1, 2] },
+        &mut binrw::io::Cursor::new(&mut result),
+    )
+    .unwrap();
+    t::assert_eq!(b"\0\x01\x02", &result[..]);
+}
