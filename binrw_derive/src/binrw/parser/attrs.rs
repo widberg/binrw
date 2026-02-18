@@ -18,6 +18,7 @@ pub(super) type Count = MetaExpr<kw::count>;
 pub(super) type Debug = MetaVoid<kw::dbg>;
 pub(super) type Default = MetaVoid<kw::default>;
 pub(super) type ErrContext = MetaList<kw::err_context, Expr>;
+pub(super) type FillValue = MetaExpr<kw::fill_value>;
 pub(super) type If = MetaList<Token![if], Expr>;
 pub(super) type Ignore = MetaVoid<kw::ignore>;
 pub(super) type Import = MetaEnclosedList<kw::import, IdentPatType, IdentTypeMaybeDefault>;

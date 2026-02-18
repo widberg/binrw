@@ -262,25 +262,25 @@ where
     func
 }
 
-pub fn write_zeroes<W: Write>(writer: &mut W, count: u64) -> BinResult<()> {
+pub fn write_fill<W: Write>(writer: &mut W, count: u64, fill: u8) -> BinResult<()> {
     const BUF_SIZE: u16 = 0x20;
-    const ZEROES: [u8; BUF_SIZE as usize] = [0u8; BUF_SIZE as usize];
+    let fill_buffer = [fill; BUF_SIZE as usize];
 
     if count <= BUF_SIZE.into() {
         // Lint: `count` is guaranteed to be <= BUF_SIZE
         #[allow(clippy::cast_possible_truncation)]
-        writer.write_all(&ZEROES[..count as usize])?;
+        writer.write_all(&fill_buffer[..count as usize])?;
     } else {
         let full_chunks = count / u64::from(BUF_SIZE);
         let remaining = count % u64::from(BUF_SIZE);
 
         for _ in 0..full_chunks {
-            writer.write_all(&ZEROES)?;
+            writer.write_all(&fill_buffer)?;
         }
 
         // Lint: `remaining` is guaranteed to be < BUF_SIZE
         #[allow(clippy::cast_possible_truncation)]
-        writer.write_all(&ZEROES[..remaining as usize])?;
+        writer.write_all(&fill_buffer[..remaining as usize])?;
     }
 
     Ok(())

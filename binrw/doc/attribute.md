@@ -102,6 +102,7 @@ Glossary of directives in binrw attributes (`#[br]`, `#[bw]`, `#[brw]`).
 | r   | [`dbg`](#debug) | field | Prints the value and offset of a field to `stderr`.
 | r   | [`default`](#ignore) | field | An alias for `ignore`.
 | r   | [`err_context`](#backtrace) | field | Adds additional context to errors.
+|  w  | [`fill_value`](#padding-and-alignment) | field | Sets the byte used for padding written by `pad_before`, `pad_after`, `align_before`, `align_after`, `pad_size_to`, and `align_size_to`.
 | rw  | [`if`](#conditional-values) | field | <span class="brw">Reads or writes</span><span class="br">Reads</span><span class="bw">Writes</span> data only if a condition is true.
 | rw  | [`ignore`](#ignore) | field | <span class="brw">For `BinRead`, uses the [`default`](core::default::Default) value for a field instead of reading data. For `BinWrite`, skips writing the field.</span><span class="br">Uses the [`default`](core::default::Default) value for a field instead of reading data.</span><span class="bw">Skips writing the field.</span>
 | rw  | [`import`](#arguments) | struct, non-unit enum, unit-like enum | Defines extra arguments for a struct or enum.
@@ -2014,6 +2015,18 @@ respectively:
 ```text
 #[bw(pad_after = $skip_bytes:expr)] or #[bw(pad_after($skip_bytes:expr))]
 #[bw(pad_before = $skip_bytes:expr)] or #[bw(pad_before($skip_bytes:expr))]
+```
+</div>
+
+When writing, padding bytes default to `0`. The `fill_value` directive can be
+used to override the byte value used by all padding/alignment directives on
+that field (`pad_before`, `pad_after`, `align_before`, `align_after`,
+`pad_size_to`, and `align_size_to`):
+
+<div class="bw">
+
+```text
+#[bw(fill_value = $byte:expr)] or #[bw(fill_value($byte:expr))]
 ```
 </div>
 

@@ -174,3 +174,54 @@ fn align_after_negative_is_error() {
     let err = binrw::BinWrite::write_le(&Test { x: 1 }, &mut writer).unwrap_err();
     assert_align_error(err, "align_after");
 }
+
+#[test]
+fn padding_fill_value() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(
+            fill_value = 0xff_u8,
+            pad_before = 0x1_u32,
+            align_before = 0x4_u32,
+            pad_after = 0x1_u32,
+            align_after = 0x8_u32
+        )]
+        x: u8,
+    }
+
+    let mut x = binrw::io::Cursor::new(t::Vec::new());
+    binrw::BinWrite::write_options(&Test { x: 0x11 }, &mut x, binrw::Endian::Little, ()).unwrap();
+
+    t::assert_eq!(
+        x.into_inner(),
+        t::vec![0xff, 0xff, 0xff, 0xff, 0x11, 0xff, 0xff, 0xff]
+    );
+}
+
+#[test]
+fn padding_fill_value_pad_size_to() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(fill_value = 0xaa_u8, pad_size_to = 0x4_u32)]
+        x: u8,
+    }
+
+    let mut x = binrw::io::Cursor::new(t::Vec::new());
+    binrw::BinWrite::write_options(&Test { x: 0x12 }, &mut x, binrw::Endian::Little, ()).unwrap();
+
+    t::assert_eq!(x.into_inner(), t::vec![0x12, 0xaa, 0xaa, 0xaa]);
+}
+
+#[test]
+fn padding_fill_value_align_size_to() {
+    #[derive(binrw::BinWrite)]
+    struct Test {
+        #[bw(fill_value = 0xbb_u8, align_size_to = 0x4_u32)]
+        x: u8,
+    }
+
+    let mut x = binrw::io::Cursor::new(t::Vec::new());
+    binrw::BinWrite::write_options(&Test { x: 0x13 }, &mut x, binrw::Endian::Little, ()).unwrap();
+
+    t::assert_eq!(x.into_inner(), t::vec![0x13, 0xbb, 0xbb, 0xbb]);
+}

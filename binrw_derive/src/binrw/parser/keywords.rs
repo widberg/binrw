@@ -24,6 +24,7 @@ define_keywords! {
     dbg,
     default,
     err_context,
+    fill_value,
     ignore,
     import,
     import_raw,

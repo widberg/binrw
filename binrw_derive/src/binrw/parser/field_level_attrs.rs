@@ -52,6 +52,8 @@ attr_struct! {
         pub(crate) align_before: Option<TokenStream>,
         #[from(RW:AlignAfter)]
         pub(crate) align_after: Option<TokenStream>,
+        #[from(WO:FillValue)]
+        pub(crate) fill_value: Option<TokenStream>,
         #[from(RW:SeekBefore)]
         pub(crate) seek_before: Option<TokenStream>,
         #[from(RW:PadSizeTo)]
@@ -128,6 +130,7 @@ impl StructField {
                 pad_after,
                 align_before,
                 align_after,
+                fill_value,
                 seek_before,
                 pad_size_to,
                 align_size_to,
@@ -241,6 +244,7 @@ impl FromField for StructField {
             pad_after: <_>::default(),
             align_before: <_>::default(),
             align_after: <_>::default(),
+            fill_value: <_>::default(),
             seek_before: <_>::default(),
             pad_size_to: <_>::default(),
             align_size_to: <_>::default(),

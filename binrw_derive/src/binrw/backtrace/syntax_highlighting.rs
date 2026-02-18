@@ -191,6 +191,7 @@ fn visit_expr_attributes(field: &StructField, visitor: &mut Visitor) {
         pad_after,
         align_before,
         align_after,
+        fill_value,
         seek_before,
         pad_size_to,
         align_size_to
@@ -392,7 +393,7 @@ fn is_keyword_ident(ident: &syn::Ident) -> bool {
 
         // binrw 'keywords'
         align_after, align_before, args, args_raw, assert, big, binread, br, brw, binwrite,
-        bw, calc, count, default, ignore, import, import_raw, is_big, is_little,
+        bw, calc, count, default, fill_value, ignore, import, import_raw, is_big, is_little,
         little, magic, map, offset, pad_after, pad_before, pad_size_to, parse_with,
         pre_assert, repr, restore_position, return_all_errors,
         return_unexpected_error, seek_before, temp, try_map, write_with
