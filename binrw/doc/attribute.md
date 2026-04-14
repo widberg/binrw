@@ -129,6 +129,7 @@ Glossary of directives in binrw attributes (`#[br]`, `#[bw]`, `#[brw]`).
 | r   | [`try`](#try) | field | Tries to parse and stores the [`default`](core::default::Default) value for the type if parsing fails instead of returning an error.
 | rw  | [`try_calc`](#calculations) | field | Like `calc`, but returns a [`Result`].
 | rw  | [`try_map`](#map) | all except unit variant | Like `map`, but returns a [`Result`].
+| rw  | [`with`](#custom-parserswriters) | field | Shorthand for `parse_with` and `write_with` using a module’s `parse` and `write` functions.
 |  w  | [`write_with`](#custom-parserswriters) | field | Specifies a custom function for writing a field.
 
 [*]: #terminology
@@ -1315,6 +1316,21 @@ directive (for example, to construct a serialisation function at runtime by
 calling a function generator).
 </div>
 
+The `with` directive is field-level shorthand for using a module that provides
+both a parser and writer:
+
+```text
+#[br(with = $module:path)] or #[br(with($module:path))]
+#[bw(with = $module:path)] or #[bw(with($module:path))]
+```
+
+It expands to:
+
+* `#[br(with = module)]` → `#[br(parse_with = module::parse)]`
+* `#[bw(with = module)]` → `#[bw(write_with = module::write)]`
+
+Using `#[brw(with = module)]` applies both at once.
+
 ## Examples
 
 <div class="br">
@@ -1378,6 +1394,35 @@ object.write(&mut output).unwrap();
 assert_eq!(output.into_inner(), b"\0\0\0\x01\0\x02\0\x03");
 ```
 </div>
+
+### Sharing parser/writer logic with `with`
+
+```
+# use binrw::{prelude::*, io::{prelude::*, Cursor}, Endian};
+mod as_word {
+    #[binrw::parser(reader, endian)]
+    pub fn parse() -> binrw::BinResult<u16> {
+        <u16 as binrw::BinRead>::read_options(reader, endian, ())
+    }
+
+    #[binrw::writer(writer, endian)]
+    pub fn write(value: &u16) -> binrw::BinResult<()> {
+        <u16 as binrw::BinWrite>::write_options(value, writer, endian, ())
+    }
+}
+
+#[derive(BinRead, BinWrite)]
+#[brw(big)]
+struct MyType {
+    #[brw(with = as_word)]
+    value: u16,
+}
+
+let mut output = Cursor::new(vec![]);
+MyType { value: 0x1234 }.write(&mut output).unwrap();
+assert_eq!(output.into_inner(), b"\x12\x34");
+assert_eq!(Cursor::new(b"\x12\x34").read_be::<MyType>().unwrap().value, 0x1234);
+```
 
 <div class="br">
 
