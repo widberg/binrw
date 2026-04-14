@@ -305,7 +305,11 @@ impl<const WRITE: bool> FromInput<StructAttr<WRITE>> for Struct {
                     ));
                 }
 
-                if (WRITE && !matches!(field.field_mode, FieldMode::Function(_)))
+                if (WRITE
+                    && !matches!(
+                        field.field_mode,
+                        FieldMode::Function(_) | FieldMode::With(_)
+                    ))
                     || (!WRITE && matches!(field.field_mode, FieldMode::Normal))
                 {
                     type_paths.extend(generic_params_in_ty);

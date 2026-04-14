@@ -369,6 +369,11 @@ impl<'field> FieldGenerator<'field> {
                     let #READ_FUNCTION = #PARSE_FN_TYPE_HINT(#parser);
                 }
             }
+            FieldMode::With(module) => {
+                quote_spanned_any! { module.span()=>
+                    let #READ_FUNCTION = #PARSE_FN_TYPE_HINT(#module::parse);
+                }
+            }
             FieldMode::Normal => quote! {
                 let #READ_FUNCTION = #READ_METHOD;
             },
@@ -390,7 +395,10 @@ impl<'field> FieldGenerator<'field> {
             let args = get_passed_args(self.field, &self.outer_reader_var);
             let ty = &self.field.ty;
 
-            if let FieldMode::Function(_) = &self.field.field_mode {
+            if matches!(
+                &self.field.field_mode,
+                FieldMode::Function(_) | FieldMode::With(_)
+            ) {
                 quote_spanned! {ty.span()=>
                     let #args_var = #ARGS_TYPE_HINT::<_, #ty, _, _>(&#READ_FUNCTION, #args);
                 }
@@ -445,7 +453,7 @@ impl<'field> FieldGenerator<'field> {
             FieldMode::Default => quote! { ::core::default::Default::default() },
             FieldMode::Calc(calc) => quote! { #calc },
             FieldMode::TryCalc(calc) => get_try_calc(POS, &self.field.ty, calc),
-            read_mode @ (FieldMode::Normal | FieldMode::Function(_)) => {
+            read_mode @ (FieldMode::Normal | FieldMode::Function(_) | FieldMode::With(_)) => {
                 let args_arg = self.args_var.as_ref().map_or_else(
                     || quote_spanned! {self.field.ty.span()=> <_ as #REQUIRED_ARG_TRAIT>::args() },
                     ToTokens::to_token_stream,
@@ -453,27 +461,31 @@ impl<'field> FieldGenerator<'field> {
                 let reader_var = &self.reader_var;
                 let endian_var = &self.endian_var;
 
-                if let FieldMode::Function(f) = read_mode {
-                    let ty = &self.field.ty;
-                    // Mapping the value with an explicit type ensures the
-                    // incompatible type is warned here as a mismatched type
-                    // instead of later as a try-conversion error
-                    let map = self.field.map.is_none().then(|| {
-                        quote_spanned! { f.span()=>
-                            .map(|v| -> #ty { v })
-                        }
-                    });
+                match read_mode {
+                    FieldMode::Function(f) | FieldMode::With(f) => {
+                        let ty = &self.field.ty;
+                        // Mapping the value with an explicit type ensures the
+                        // incompatible type is warned here as a mismatched type
+                        // instead of later as a try-conversion error
+                        let map = self.field.map.is_none().then(|| {
+                            quote_spanned! { f.span()=>
+                                .map(|v| -> #ty { v })
+                            }
+                        });
 
-                    // Adding a closure suppresses mentions of the generated
-                    // READ_FUNCTION variable in errors
-                    quote_spanned_any! { f.span()=>
-                        (|| #READ_FUNCTION)()(#reader_var, #endian_var, #args_arg)
-                        #map
+                        // Adding a closure suppresses mentions of the generated
+                        // READ_FUNCTION variable in errors
+                        quote_spanned_any! { f.span()=>
+                            (|| #READ_FUNCTION)()(#reader_var, #endian_var, #args_arg)
+                            #map
+                        }
                     }
-                } else {
-                    quote! {
-                        #READ_FUNCTION(#reader_var, #endian_var, #args_arg)
+                    FieldMode::Normal => {
+                        quote! {
+                            #READ_FUNCTION(#reader_var, #endian_var, #args_arg)
+                        }
                     }
+                    _ => unreachable!(),
                 }
             }
         };
@@ -488,7 +500,7 @@ impl<'field> FieldGenerator<'field> {
                 quote! { #result.unwrap_or_default() }
             } else {
                 let span = match &self.field.field_mode {
-                    FieldMode::Function(f) => f.span(),
+                    FieldMode::Function(f) | FieldMode::With(f) => f.span(),
                     _ => result.span(),
                 };
 

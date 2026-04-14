@@ -94,6 +94,7 @@ impl<'a> StructFieldGenerator<'a> {
                 quote! { #WRITE_METHOD }
             }
             FieldMode::Function(write_fn) => write_fn.clone(),
+            FieldMode::With(module) => quote_spanned_any! { module.span()=> #module::write },
             FieldMode::Default => unreachable!("Ignored fields are not written"),
         };
 
@@ -294,7 +295,7 @@ impl<'a> StructFieldGenerator<'a> {
                     }
                 }
             },
-            FieldMode::Function(_) => quote! {
+            FieldMode::Function(_) | FieldMode::With(_) => quote! {
                 let #args = #WRITE_ARGS_TYPE_HINT(&#WRITE_FUNCTION, #args_val);
                 #out
             },

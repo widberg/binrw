@@ -50,5 +50,6 @@ define_keywords! {
     temp,
     try_calc,
     try_map,
+    with,
     write_with,
 }

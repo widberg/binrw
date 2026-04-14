@@ -244,8 +244,10 @@ fn visit_expr_attributes(field: &StructField, visitor: &mut Visitor) {
         PassedArgs::None => (),
     }
 
-    if let FieldMode::Calc(expr) | FieldMode::TryCalc(expr) | FieldMode::Function(expr) =
-        &field.field_mode
+    if let FieldMode::Calc(expr)
+    | FieldMode::TryCalc(expr)
+    | FieldMode::Function(expr)
+    | FieldMode::With(expr) = &field.field_mode
     {
         visit!(expr.clone());
     }
@@ -396,7 +398,7 @@ fn is_keyword_ident(ident: &syn::Ident) -> bool {
         bw, calc, count, default, fill_value, ignore, import, import_raw, is_big, is_little,
         little, magic, map, offset, pad_after, pad_before, pad_size_to, parse_with,
         pre_assert, repr, restore_position, return_all_errors,
-        return_unexpected_error, seek_before, temp, try_map, write_with
+        return_unexpected_error, seek_before, temp, try_map, with, write_with
     );
 
     is_keyword

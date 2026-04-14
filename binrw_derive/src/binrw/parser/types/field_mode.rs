@@ -12,6 +12,7 @@ pub(crate) enum FieldMode {
     Default,
     Calc(TokenStream),
     TryCalc(TokenStream),
+    With(TokenStream),
     Function(TokenStream),
 }
 
@@ -42,6 +43,12 @@ impl From<attrs::TryCalc> for FieldMode {
 impl From<attrs::ParseWith> for FieldMode {
     fn from(parse_with: attrs::ParseWith) -> Self {
         Self::Function(parse_with.into_token_stream())
+    }
+}
+
+impl From<attrs::With> for FieldMode {
+    fn from(with: attrs::With) -> Self {
+        Self::With(with.into_token_stream())
     }
 }
 
